@@ -3,6 +3,7 @@ package liu.york.spring.cloud.zuul.config;
 import com.alibaba.fastjson.JSON;
 import com.netflix.zuul.ZuulFilter;
 import com.netflix.zuul.context.RequestContext;
+import liu.york.spring.cloud.zuul.constants.FilterOrderConstant;
 import liu.york.spring.cloud.zuul.model.ResponseModel;
 import liu.york.spring.cloud.zuul.model.ResponseUtil;
 import liu.york.spring.cloud.zuul.rest.AuthFeignClient;
@@ -64,7 +65,7 @@ public class ZuulAccessFilter extends ZuulFilter {
      */
     @Override
     public int filterOrder() {
-        return FilterConstants.SERVLET_DETECTION_FILTER_ORDER - 1;
+        return FilterOrderConstant.CHECK_TOKEN_ORDER;
     }
 
     /**
@@ -78,7 +79,7 @@ public class ZuulAccessFilter extends ZuulFilter {
     /**
      * 拦截器拦截的核心逻辑
      * 1 比如后面的微服务需要验证请求头或者请求体中是否有token信息，由于zuul默认不会带有token在请求头中
-     * 2 比如终端发过来的数据处于安全考虑，可能会加密，zuul可以在网关层解密，再传到后面的微服务
+     * 2 比如终端发过来的数据处于安全考虑，可能会加密，Zuul可以在网关层解密，再传到后面的微服务
      */
     @Override
     public Object run() {
@@ -98,6 +99,8 @@ public class ZuulAccessFilter extends ZuulFilter {
             wrapFailResponse(ctx, ResponseUtil.error(HttpStatus.UNAUTHORIZED.value(),"禁止访问!"));
             return null;
         }
+
+        authFeignClient.checkToken(token);
 
         CloseableHttpClient httpClient = HttpClients.createDefault();
         HttpGet httpGet = new HttpGet("http://127.0.0.1:9999/oauth/check_token?token=" + token);
@@ -132,6 +135,10 @@ public class ZuulAccessFilter extends ZuulFilter {
 
         if (StringUtils.isEmpty(token)) {
             token = request.getParameter("token");
+
+
+        } else {
+            token = StringUtils.substringAfter(token, "Bearer ");
         }
 
         return token;
@@ -142,7 +149,7 @@ public class ZuulAccessFilter extends ZuulFilter {
      * @param ctx       响应体
      * @param model     响应对象
      */
-    private void wrapFailResponse(RequestContext ctx, ResponseModel model){
+    static void wrapFailResponse(RequestContext ctx, ResponseModel model){
         HttpServletResponse response = ctx.getResponse();
         response.addHeader("Content-Type", "application/json;charset=UTF-8");
         ctx.setResponseStatusCode(model.getCode());

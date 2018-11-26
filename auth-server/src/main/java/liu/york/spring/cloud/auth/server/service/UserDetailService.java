@@ -1,6 +1,5 @@
 package liu.york.spring.cloud.auth.server.service;
 
-import liu.york.spring.cloud.auth.server.constants.AuthConstants;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;

@@ -7,9 +7,9 @@ public class AuthConstants {
     /** admin 角色 */
     public static final String ROLE_ADMIN = "admin";
 
-    public static final String ADMIN_ROLES = "/**";
+    public static final String ADMIN_ROLES = "/admin/query";
 
-    public static final String USER_ROLES = "/user/query,/order/query";
+    public static final String USER_ROLES = "/user/query";
 
 
 

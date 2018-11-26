@@ -1,15 +1,14 @@
 package liu.york.spring.cloud.user.server.oauth2;
 
+import liu.york.spring.cloud.user.server.exception.YorkAccessDeniedHandler;
+import liu.york.spring.cloud.user.server.exception.YorkAuthenticationEntryPoint;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.security.Http401AuthenticationEntryPoint;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.oauth2.config.annotation.web.configuration.EnableAuthorizationServer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableResourceServer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.ResourceServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configurers.ResourceServerSecurityConfigurer;
@@ -37,9 +36,6 @@ public class ResourceServerConfig extends ResourceServerConfigurerAdapter {
     public void configure(HttpSecurity http) throws Exception {
         http
                 .csrf().disable()
-//                .exceptionHandling()
-//                .authenticationEntryPoint(new Http401AuthenticationEntryPoint("Bearer realm=\"webrealm\""))
-
                 .authorizeRequests()
                 /*
                  * 由于资源服务器不和授权一起，所有下面的配置不会生效，只要有token就直接放行
@@ -47,15 +43,32 @@ public class ResourceServerConfig extends ResourceServerConfigurerAdapter {
                  */
 //                .antMatchers("/res1/*").hasAuthority("admin")
 //                .antMatchers("/res2/*").hasAuthority("user")
+                .antMatchers("/health").permitAll()
                 .anyRequest()
 //                .authenticated();
                 .access("@rbacService.hasPermission(request,authentication)");
+
+
+//        YorkAccessDeniedHandler accessDeniedHandler = new YorkAccessDeniedHandler();
+//        YorkAuthenticationEntryPoint authenticationEntryPoint = new YorkAuthenticationEntryPoint();
+//        http.exceptionHandling().accessDeniedHandler(accessDeniedHandler);
+//        http.exceptionHandling().authenticationEntryPoint(authenticationEntryPoint);
     }
 
     @Override
     public void configure(ResourceServerSecurityConfigurer resources) throws Exception {
         resources.resourceId("id1");
         resources.expressionHandler(expressionHandler);
+
+        /*
+         * 1 下面两个配置其实也可以配置 configure(HttpSecurity http) 方法
+         * 2 但是作为资源服务器，应该配置这里才对
+         */
+        YorkAccessDeniedHandler accessDeniedHandler = new YorkAccessDeniedHandler();
+        YorkAuthenticationEntryPoint authenticationEntryPoint = new YorkAuthenticationEntryPoint();
+        resources.accessDeniedHandler(accessDeniedHandler);
+        resources.authenticationEntryPoint(authenticationEntryPoint);
+
     }
 
 
