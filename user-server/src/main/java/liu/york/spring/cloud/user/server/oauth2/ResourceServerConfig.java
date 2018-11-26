@@ -1,6 +1,7 @@
 package liu.york.spring.cloud.user.server.oauth2;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.Http401AuthenticationEntryPoint;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,8 +36,10 @@ public class ResourceServerConfig extends ResourceServerConfigurerAdapter {
     @Override
     public void configure(HttpSecurity http) throws Exception {
         http
-                .formLogin()
-                .and()
+                .csrf().disable()
+//                .exceptionHandling()
+//                .authenticationEntryPoint(new Http401AuthenticationEntryPoint("Bearer realm=\"webrealm\""))
+
                 .authorizeRequests()
                 /*
                  * 由于资源服务器不和授权一起，所有下面的配置不会生效，只要有token就直接放行

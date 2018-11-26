@@ -1,30 +1,61 @@
 package liu.york.spring.cloud.zuul.config;
 
+import com.alibaba.fastjson.JSON;
 import com.netflix.zuul.ZuulFilter;
 import com.netflix.zuul.context.RequestContext;
+import liu.york.spring.cloud.zuul.model.ResponseModel;
+import liu.york.spring.cloud.zuul.model.ResponseUtil;
+import liu.york.spring.cloud.zuul.rest.AuthFeignClient;
+import org.apache.commons.lang.StringUtils;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.netflix.zuul.filters.support.FilterConstants;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.util.AntPathMatcher;
+import org.springframework.web.client.RestTemplate;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 
+/**
+ * 校验除了登录接口以外的 url 是否有 token， 且 校验 token 的有效性
+ */
 @Component
 public class ZuulAccessFilter extends ZuulFilter {
 
     /**
+     * 这里使用 feign 注入来调用是可以实现的，但是由于调用的是oauth2 的接口，而不是业务接口，导致响应体中会出现4xx
+     * 的情况，而出现这种情况该接口调用会直接抛出异常，所以这里不使用 feign 调用
+     * 建议就是 feign 调用只用于业务接口
+     */
+    @Autowired
+    public AuthFeignClient authFeignClient;
+
+    @Autowired
+    public RestTemplate restTemplate;
+
+    private AntPathMatcher antPathMatcher = new AntPathMatcher();
+
+    private static final String oauthTokenUri = "/auth-server/oauth/token";
+
+    /**
      * 这里通过返回具体的字符串表示当前过滤器拦截的位置
-     *
+     * <p>
      * pre:     请求路由之前被调用
      * routing: 路由请求时被调用
      * post:    在routing和error过滤器之后被调用
      * error:   处理请求时发生错误时被调用
-     *
+     * <p>
      * 四个常量值在 {@link FilterConstants}
      */
     @Override
     public String filterType() {
-//        return FilterConstants.PRE_TYPE;
-        return "pre";
+        return FilterConstants.PRE_TYPE;
     }
 
     /**
@@ -33,7 +64,7 @@ public class ZuulAccessFilter extends ZuulFilter {
      */
     @Override
     public int filterOrder() {
-        return 0;
+        return FilterConstants.SERVLET_DETECTION_FILTER_ORDER - 1;
     }
 
     /**
@@ -41,34 +72,87 @@ public class ZuulAccessFilter extends ZuulFilter {
      */
     @Override
     public boolean shouldFilter() {
-        return true;
+        return Boolean.TRUE;
     }
 
     /**
      * 拦截器拦截的核心逻辑
      * 1 比如后面的微服务需要验证请求头或者请求体中是否有token信息，由于zuul默认不会带有token在请求头中
      * 2 比如终端发过来的数据处于安全考虑，可能会加密，zuul可以在网关层解密，再传到后面的微服务
-     *
      */
     @Override
     public Object run() {
-
         RequestContext ctx = RequestContext.getCurrentContext();
         HttpServletRequest request = ctx.getRequest();
 
-        String token = request.getHeader("token");
+        String requestURI = request.getRequestURI();
+        System.out.println("请求路径:" + request.getRequestURI());
 
-        if(token == null){
-            ctx.setSendZuulResponse(false);
-            ctx.setResponseStatusCode(HttpStatus.UNAUTHORIZED.value());
-        } else {
-            // TODO: 2018/11/22  根据token获取相应的登录信息，进行校验（略）
-            // 如果权限不够，则可以返回 403
+        if (antPathMatcher.match(oauthTokenUri, requestURI)) {
+            return null;
         }
-        /* 验证通过后添加Basic Auth认证信息 */
-        ctx.addZuulRequestHeader("Authorization", "Basic " + "xxxYYY");
-        return null;
+
+        String token = getTokenByRequest(request);
+
+        if (StringUtils.isEmpty(token)) {
+            wrapFailResponse(ctx, ResponseUtil.error(HttpStatus.UNAUTHORIZED.value(),"禁止访问!"));
+            return null;
+        }
+
+        CloseableHttpClient httpClient = HttpClients.createDefault();
+        HttpGet httpGet = new HttpGet("http://127.0.0.1:9999/oauth/check_token?token=" + token);
+
+        int statusCode = 0;
+        try {
+            CloseableHttpResponse execute = httpClient.execute(httpGet);
+            statusCode = execute.getStatusLine().getStatusCode();
+        } catch (IOException e) {
+            System.out.println(e.getMessage());
+        }
+
+        if (statusCode == HttpStatus.OK.value()) {
+            System.out.println("校验 token 通过");
+            return null;
+        } else {
+            wrapFailResponse(ctx, ResponseUtil.error(HttpStatus.FORBIDDEN.value(),"token无效!"));
+            return null;
+        }
     }
+
+    /**
+     * 获取请求体中的 token
+     * 先从请求头中获取 token， 如果没有再从请求参数中获取
+     *
+     * @param request 请求体
+     * @return 请求体中的token
+     */
+    private String getTokenByRequest(HttpServletRequest request) {
+
+        String token = request.getHeader("Authorization");
+
+        if (StringUtils.isEmpty(token)) {
+            token = request.getParameter("token");
+        }
+
+        return token;
+    }
+
+    /**
+     * 封装失败返回体
+     * @param ctx       响应体
+     * @param model     响应对象
+     */
+    private void wrapFailResponse(RequestContext ctx, ResponseModel model){
+        HttpServletResponse response = ctx.getResponse();
+        response.addHeader("Content-Type", "application/json;charset=UTF-8");
+        ctx.setResponseStatusCode(model.getCode());
+        ctx.setSendZuulResponse(Boolean.FALSE);
+        ctx.setResponseBody(JSON.toJSONString(model));
+    }
+
+}
+
+
 
 /* 如果需要修改请求体 body  可以参考
 public Object run() {
@@ -150,5 +234,3 @@ public Object run() {
 
 这里演示了通过特定的token参数值，将请求引导到gated-lanuch=true的机器上
 */
-
-}
