@@ -1,5 +1,6 @@
 package liu.york.spring.cloud.demo.controller;
 
+import liu.york.spring.cloud.feign.api.hello.HelloFeignClient;
 import liu.york.spring.cloud.feign.api.order.OrderFeignClient;
 import liu.york.spring.cloud.feign.api.user.UserFeignClient;
 import liu.york.spring.cloud.model.order.Order;
@@ -23,6 +24,9 @@ public class DemoController {
     @Autowired
     private OrderFeignClient orderFeignClient;
 
+    @Autowired
+    private HelloFeignClient helloFeignClient;
+
     @GetMapping("/query/users")
     public List<User> users(){
         return userFeignClient.query();
@@ -31,5 +35,10 @@ public class DemoController {
     @GetMapping("/query/orders")
     public List<Order> orders(){
         return orderFeignClient.query();
+    }
+
+    @RequestMapping("/home/user")
+    public void hello(){
+        helloFeignClient.hello();
     }
 }

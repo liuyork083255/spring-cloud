@@ -24,4 +24,9 @@ public class OrderController {
 
         return Arrays.asList(o1, o2);
     }
+
+    @RequestMapping("/hello")
+    public void hello(){
+        System.out.println("home");
+    }
 }
